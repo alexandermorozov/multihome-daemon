@@ -2,12 +2,15 @@ import Control.Monad (liftM)
 import Data.Bits (complement, shiftR, shiftL, (.&.), (.|.))
 import Data.Binary.Get (runGet, getWord8, getWord16be, remaining)
 import Data.Binary.Put (runPut, putWord8, putWord16be, putWord32be, putLazyByteString)
+import qualified Data.ByteString as SB
 import qualified Data.ByteString.Lazy as B
 import Data.Word (Word8, Word16, Word32)
 import Data.List (foldl')                        
 import Network.BSD (getProtocolByName, protoNumber)
 import Network.Socket (withSocketsDo, socket, inet_addr,
-                       HostAddress, Family (AF_INET), SocketType (Raw))
+                       HostAddress, Family (AF_INET), SocketType (Raw),
+                       SockAddr (SockAddrInet))
+import Network.Socket.ByteString (sendTo)
 
 main = withSocketsDo $ do
     addr <- inet_addr "192.168.3.2"
@@ -18,8 +21,11 @@ doPing :: HostAddress -> IO ()
 doPing addr = do
     proto <- getProtocolByName "icmp"
     s <- socket AF_INET Raw (protoNumber proto)
-    
+    let pkt = createIcmpEchoRequest 4902 4 B.empty
+    sendTo s (unlazy pkt) (SockAddrInet 0 addr)
     return ()
+  where
+    unlazy = SB.concat . B.toChunks
 
 createIcmpEchoRequest :: Word16 -> Word16 -> B.ByteString -> B.ByteString
 createIcmpEchoRequest identifier sequence payload =
