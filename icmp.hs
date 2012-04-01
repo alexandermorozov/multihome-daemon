@@ -1,4 +1,4 @@
-import Control.Monad (liftM)
+import Control.Monad (liftM, forever)
 import Data.Bits (complement, shiftR, shiftL, (.&.), (.|.))
 import Data.Binary.Get (runGet, getWord8, getWord16be, remaining)
 import Data.Binary.Put (runPut, putWord8, putWord16be, putWord32be, putLazyByteString)
@@ -10,7 +10,7 @@ import Network.BSD (getProtocolByName, protoNumber)
 import Network.Socket (withSocketsDo, socket, inet_addr,
                        HostAddress, Family (AF_INET), SocketType (Raw),
                        SockAddr (SockAddrInet))
-import Network.Socket.ByteString (sendTo)
+import Network.Socket.ByteString (sendTo, recvFrom)
 
 main = withSocketsDo $ do
     addr <- inet_addr "192.168.3.2"
@@ -23,13 +23,15 @@ doPing addr = do
     s <- socket AF_INET Raw (protoNumber proto)
     let pkt = createIcmpEchoRequest 4902 4 B.empty
     sendTo s (unlazy pkt) (SockAddrInet 0 addr)
-    return ()
+    forever $ do
+        (p, saddr) <- recvFrom s 1024
+        print p
   where
     unlazy = SB.concat . B.toChunks
 
 createIcmpEchoRequest :: Word16 -> Word16 -> B.ByteString -> B.ByteString
 createIcmpEchoRequest identifier sequence payload =
-    let quench = (2^16 * (fromIntegral identifier)) .|. fromIntegral sequence
+    let quench = (2^16 * fromIntegral identifier) .|. fromIntegral sequence
     in  createIcmp 8 0 quench payload
 
 createIcmp :: Word8 -> Word8 -> Word32 -> B.ByteString -> B.ByteString
