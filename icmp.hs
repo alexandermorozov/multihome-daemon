@@ -1,7 +1,7 @@
 import Control.Monad (liftM)
-import Data.Bits (complement, shiftR, (.&.))
+import Data.Bits (complement, shiftR, shiftL, (.&.), (.|.))
 import Data.Binary.Get (runGet, getWord8, getWord16be, remaining)
-import Data.Binary.Put (runPut, putWord8, putWord16be, putLazyByteString)
+import Data.Binary.Put (runPut, putWord8, putWord16be, putWord32be, putLazyByteString)
 import qualified Data.ByteString.Lazy as B
 import Data.Word (Word8, Word16, Word32)
 import Data.List (foldl')                        
@@ -21,16 +21,20 @@ doPing addr = do
     
     return ()
 
-createIcmp :: Word8 -> Word8 -> Word16 -> Word16 -> B.ByteString -> B.ByteString
-createIcmp type' code identifier sequence payload =
+createIcmpEchoRequest :: Word16 -> Word16 -> B.ByteString -> B.ByteString
+createIcmpEchoRequest identifier sequence payload =
+    let quench = (2^16 * (fromIntegral identifier)) .|. fromIntegral sequence
+    in  createIcmp 8 0 quench payload
+
+createIcmp :: Word8 -> Word8 -> Word32 -> B.ByteString -> B.ByteString
+createIcmp type' code quench payload =
     assemble $ inetChecksum $ assemble 0 
   where
     assemble csum = runPut $ do
         putWord8 type'
         putWord8 code
         putWord16be csum
-        putWord16be identifier
-        putWord16be sequence
+        putWord32be quench
         putLazyByteString payload 
 
 inetChecksum :: B.ByteString -> Word16
