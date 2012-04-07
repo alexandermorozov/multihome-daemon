@@ -1,28 +1,39 @@
 import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.MVar (MVar, newMVar, takeMVar, putMVar)
 import Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
 import Control.Monad (liftM, forever)
 import Data.List (null, sortBy)
 import Data.Time.Clock (UTCTime, getCurrentTime, diffUTCTime, addUTCTime)
 import System.Timeout (timeout)
 
-data TimerReel = TimerReel {reelChan :: Chan TMessage}
+data TimerReel = TimerReel {
+                     reelChan :: Chan TMessage,
+                     reelSeq :: MVar Integer
+                 }
 
-data Timer = Timer {timerId :: Integer, timerT :: UTCTime, timerF :: IO ()}
+data Timer = Timer {
+                 timerId :: Integer,
+                 timerT  :: UTCTime,
+                 timerF  :: IO ()
+             }
 
-data TMessage = AddTimer Double (IO ())
-              | CancelTimer
+data TMessage = AddTimer Timer
+              | CancelTimer Integer
 
 
 newTimerReel :: IO TimerReel
 newTimerReel = do
     chan <- newChan
-    forkIO $ runTimerReel chan 0 []
-    return $ TimerReel chan
+    seq <- newMVar 0
+    forkIO $ runTimerReel chan []
+    return $ TimerReel chan seq
 
 
--- a very primitive and inefficient implementation
-runTimerReel :: Chan TMessage -> Integer -> [Timer] -> IO ()
-runTimerReel chan sequence timers = do
+-- FIXME
+-- A very primitive and inefficient implementation
+-- Add is O(N * log N), remove is O(N), dispatch is O(1)
+runTimerReel :: Chan TMessage -> [Timer] -> IO ()
+runTimerReel chan timers = do
     now <- getCurrentTime
     let dt = if null timers
                 then -1 -- indefinetely
@@ -31,16 +42,14 @@ runTimerReel chan sequence timers = do
                      in  min (max 0 usecs) (fromIntegral (maxBound :: Int))
     result <- timeout (fromIntegral dt) (readChan chan)
     case result of
-        Nothing -> dispatch timers >>= runTimerReel chan sequence
-        Just (AddTimer dt f) -> do
-            expire <- liftM (addUTCTime $ realToFrac dt) getCurrentTime
-            let new = Timer sequence expire f
-                timers' = sortBy compareTimers (new:timers)
-            runTimerReel chan (sequence+1) timers'
-        -- fixme
+        Nothing ->
+            dispatch timers >>= runTimerReel chan
+        Just (AddTimer new) ->
+            runTimerReel chan $ sortBy compareTimers (new:timers)
+        Just (CancelTimer tid) ->
+            runTimerReel chan $ filter (\tm -> timerId tm /= tid) timers
   where
     compareTimers a b = compare (timerT a) (timerT b)
-    dispatch :: [Timer] -> IO [Timer]
     dispatch timers = do
         if null timers
              then return timers
@@ -51,15 +60,29 @@ runTimerReel chan sequence timers = do
                      then timerF tm >> return (tail timers)
                      else return timers
 
-addTimer :: TimerReel -> Double -> IO () -> IO ()
-addTimer reel dt action =
-    writeChan (reelChan reel) (AddTimer dt action)
+
+-- returns IO() that cancells created timer
+addTimer :: TimerReel -> Double -> IO () -> IO (IO ())
+addTimer reel dt action = do
+    sq <- takeMVar (reelSeq reel)
+    putMVar (reelSeq reel) $! (sq + 1)
+    expire <- liftM (addUTCTime $ realToFrac dt) getCurrentTime
+    let tm = Timer sq expire action
+    writeChan (reelChan reel) (AddTimer tm)
+    return $ cancelTimer reel sq
+
+
+cancelTimer :: TimerReel -> Integer -> IO ()
+cancelTimer reel tid = writeChan (reelChan reel) (CancelTimer tid)
 
 main :: IO ()
 main = do
     tr <- newTimerReel
     threadDelay 1000000
-    addTimer tr 0.5 $ print "asd"
-    addTimer tr 2.5 $ print "qwe"
-    addTimer tr 1.5 $ print "zxc"
+    c1 <- addTimer tr 0.5 $ print "asd"
+    threadDelay 1000000
+    c2 <- addTimer tr 3.5 $ print "qwe"
+    threadDelay 1000000
+    c2
+    c3 <- addTimer tr 1.5 $ print "zxc"
     forever $ threadDelay 1000
