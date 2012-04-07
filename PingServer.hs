@@ -1,8 +1,12 @@
+--module PingServer where
+
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
 import Control.Monad (liftM, forever)
-import Network.BSD (getProtocolByName, protoNumber)
 import qualified Data.ByteString as SB
 import qualified Data.ByteString.Lazy as LB
-import Network.Socket (withSocketsDo, socket, inet_addr,
+import Network.BSD (getProtocolByName, protoNumber)
+import Network.Socket (withSocketsDo, socket, inet_addr, Socket,
                        HostAddress, Family (AF_INET), SocketType (Raw),
                        SockAddr (SockAddrInet))
 import Network.Socket.ByteString (sendTo, recvFrom)
@@ -11,25 +15,50 @@ import Icmp (IpPacket(..), IcmpEchoPacket(..),
              dumpIcmpEchoRequest, parseIp, parseIcmpEchoReply)
 
 
+data PingServer = PingServer (Chan Command)
+
+data Command = AddHost String
+             | DelHost String
+             | PingReceived IpPacket IcmpEchoPacket
+             deriving(Show)
+
+
 main = withSocketsDo $ do
     addr <- inet_addr "192.168.3.2"
-    doPing addr
+    ps <- newPingServer "eth0"
+    forever $ threadDelay 1
 
 
-doPing :: HostAddress -> IO ()
-doPing addr = do
+newPingServer :: String -> IO PingServer
+newPingServer interface = do
     proto <- getProtocolByName "icmp"
     s <- socket AF_INET Raw (protoNumber proto)
-    let pkt = dumpIcmpEchoRequest $ IcmpEchoPacket 4902 4 SB.empty
-    sendTo s (fromLazy pkt) (SockAddrInet 0 addr)
+    chan <- newChan
+    forkIO $ startServer s chan
+    return $ PingServer chan
+
+
+startServer :: Socket -> Chan Command -> IO ()
+startServer s chan = do
+    forkIO $ socketListener s chan
+    loop
+  where
+    loop = do
+        cmd <- readChan chan
+        print cmd
+        loop
+
+
+socketListener :: Socket -> Chan Command -> IO ()
+socketListener s chan = do
     forever $ do
-        (p, saddr) <- recvFrom s 1024
+        (p, saddr) <- recvFrom s 65536
         -- putStrLn $ hexdump 0 $ SB8.unpack p
         case parseEcho p of
              Left errMsg -> print errMsg
-             Right (ip, echo) -> print (ip, echo)
+             Right (ip, echo) -> writeChan chan $ PingReceived ip echo
+
   where
-    fromLazy = SB.concat . LB.toChunks
     parseEcho p = do
         ip <- parseIp p
         echo <- parseIcmpEchoReply $ ipPayload ip
