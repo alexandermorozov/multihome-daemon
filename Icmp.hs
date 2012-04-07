@@ -1,4 +1,9 @@
-import Control.Monad (liftM, liftM4, forever)
+module Icmp (IpPacket(..), IcmpPacket(..), IcmpEchoPacket(..),
+             dumpIcmp, dumpIcmpEchoRequest, 
+             parseIp, parseIcmp, parseIcmpEchoReply
+            ) where
+
+import Control.Monad (liftM)
 import Data.Bits (complement, shiftR, shiftL, (.&.), (.|.))
 import qualified Data.Binary.Get as LG
 import Data.Binary.Strict.Get (runGet, getWord8, getWord16be, getWord32be,
@@ -9,11 +14,6 @@ import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Char8 as SB8
 import Data.Word (Word8, Word16, Word32)
 import Data.List (foldl')
-import Network.BSD (getProtocolByName, protoNumber)
-import Network.Socket (withSocketsDo, socket, inet_addr,
-                       HostAddress, Family (AF_INET), SocketType (Raw),
-                       SockAddr (SockAddrInet))
-import Network.Socket.ByteString (sendTo, recvFrom)
 import Text.Hexdump (hexdump)
 
 
@@ -35,32 +35,6 @@ data IcmpEchoPacket = IcmpEchoPacket {echoId :: Word16,
                                      } deriving (Show)
 
 
-main = withSocketsDo $ do
-    addr <- inet_addr "192.168.3.2"
-    doPing addr
-
-
-doPing :: HostAddress -> IO ()
-doPing addr = do
-    proto <- getProtocolByName "icmp"
-    s <- socket AF_INET Raw (protoNumber proto)
-    let pkt = dumpIcmpEchoRequest $ IcmpEchoPacket 4902 4 SB.empty
-    sendTo s (fromLazy pkt) (SockAddrInet 0 addr)
-    forever $ do
-        (p, saddr) <- recvFrom s 1024
-        -- putStrLn $ hexdump 0 $ SB8.unpack p
-        case parseEcho p of
-             Left errMsg -> print errMsg
-             Right (ip, echo) -> print (ip, echo)
-  where
-    fromLazy = SB.concat . LB.toChunks
-    parseEcho p = do
-        ip <- parseIp p
-        echo <- parseIcmpEchoReply $ ipPayload ip
-        return (ip, echo)
-
---toLazy :: SB.Bytestring -> LB.Bytestring
---toLazy s = LB.fromChunks [s]
 
 parseIp :: SB.ByteString -> Either String IpPacket
 parseIp p = fst $ flip runGet p $ do
