@@ -56,7 +56,7 @@ runTimerReel chan timers = do
                  let tm = head timers
                  now <- getCurrentTime
                  if timerT tm < now
-                     then timerF tm >> return (tail timers)
+                     then timerF tm >> dispatch (tail timers)
                      else return timers
 
 
