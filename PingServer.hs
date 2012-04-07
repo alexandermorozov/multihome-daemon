@@ -53,11 +53,9 @@ socketListener :: Socket -> Chan Command -> IO ()
 socketListener s chan = do
     forever $ do
         (p, saddr) <- recvFrom s 65536
-        -- putStrLn $ hexdump 0 $ SB8.unpack p
         case parseEcho p of
              Left errMsg -> print errMsg
              Right (ip, echo) -> writeChan chan $ PingReceived ip echo
-
   where
     parseEcho p = do
         ip <- parseIp p
