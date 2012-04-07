@@ -2,7 +2,7 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (MVar, newMVar, takeMVar, putMVar)
 import Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
 import Control.Monad (liftM, forever)
-import Data.List (null, sortBy)
+import Data.List (null, insertBy)
 import Data.Time.Clock (UTCTime, getCurrentTime, diffUTCTime, addUTCTime)
 import System.Timeout (timeout)
 
@@ -29,9 +29,8 @@ newTimerReel = do
     return $ TimerReel chan seq
 
 
--- FIXME
--- A very primitive and inefficient implementation
--- Add is O(N * log N), remove is O(N), dispatch is O(1)
+-- A very primitive and inefficient implementation.
+-- Add is O(N), remove is O(N), dispatch is O(1).
 runTimerReel :: Chan TMessage -> [Timer] -> IO ()
 runTimerReel chan timers = do
     now <- getCurrentTime
@@ -45,7 +44,7 @@ runTimerReel chan timers = do
         Nothing ->
             dispatch timers >>= runTimerReel chan
         Just (AddTimer new) ->
-            runTimerReel chan $ sortBy compareTimers (new:timers)
+            runTimerReel chan $ insertBy compareTimers new timers
         Just (CancelTimer tid) ->
             runTimerReel chan $ filter (\tm -> timerId tm /= tid) timers
   where
