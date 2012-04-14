@@ -1,0 +1,27 @@
+Name:                multihome-daemon
+Version:             0.1
+Synopsis:            Routing daemon for multihomed servers
+-- Description:         
+License:             BSD3
+License-file:        LICENSE
+Author:              Alexander Morozov
+Maintainer:          butler@meltdown.ru
+-- Copyright:           
+Category:            Network
+Build-type:          Simple
+
+-- Extra files to be distributed with the package, such as examples or
+-- a README.
+-- Extra-source-files:  
+
+Cabal-version:       >=1.2
+
+Executable multihome-daemon
+  Main-is: PingServer.hs
+  
+  -- Packages needed in order to build this package.
+  -- Build-depends:       
+  Build-Depends:  base, hexdump, bytestring, binary, binary-strict, network, time
+  Other-modules:  Timer, Sock
+  Build-tools:    c2hs 
+  

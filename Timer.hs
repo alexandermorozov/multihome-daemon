@@ -1,3 +1,5 @@
+module Timer (TimerReel, addTimer) where
+
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (MVar, newMVar, takeMVar, putMVar)
 import Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
@@ -74,14 +76,3 @@ addTimer reel dt action = do
 cancelTimer :: TimerReel -> Integer -> IO ()
 cancelTimer reel tid = writeChan (reelChan reel) (CancelTimer tid)
 
-main :: IO ()
-main = do
-    tr <- newTimerReel
-    threadDelay 1000000
-    c1 <- addTimer tr 0.5 $ print "asd"
-    threadDelay 1000000
-    c2 <- addTimer tr 3.5 $ print "qwe"
-    threadDelay 1000000
-    c2
-    c3 <- addTimer tr 1.5 $ print "zxc"
-    forever $ threadDelay 1000

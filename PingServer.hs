@@ -14,6 +14,8 @@ import Network.Socket.ByteString (sendTo, recvFrom)
 import Icmp (IpPacket(..), IcmpEchoPacket(..),
              dumpIcmpEchoRequest, parseIp, parseIcmpEchoReply)
 
+import Timer
+import SockOpt
 
 data PingServer = PingServer (Chan Command)
 
@@ -25,19 +27,26 @@ data Command = AddHost String
 
 main = withSocketsDo $ do
     addr <- inet_addr "192.168.3.2"
-    ps <- newPingServer "eth0"
+    ps <- newPingServer "br0"
     forever $ threadDelay 1
 
 
 newPingServer :: String -> IO PingServer
 newPingServer interface = do
-    proto <- getProtocolByName "icmp"
-    s <- socket AF_INET Raw (protoNumber proto)
     chan <- newChan
+    s <- openSocket interface
     forkIO $ startServer s chan
     return $ PingServer chan
 
 
+openSocket :: String -> IO Socket
+openSocket interface = do
+    proto <- getProtocolByName "icmp"
+    s <- socket AF_INET Raw (protoNumber proto)
+    setSocketBindToDevice s interface
+    return s
+    
+  
 startServer :: Socket -> Chan Command -> IO ()
 startServer s chan = do
     forkIO $ socketListener s chan
