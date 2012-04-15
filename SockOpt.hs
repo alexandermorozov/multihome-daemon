@@ -10,7 +10,7 @@ import Network.Socket
 foreign import ccall "sys/socket.h setsockopt"
      c_setSockOpt :: CInt -> CInt -> CInt -> CString -> CInt -> IO CInt
 
--- Debian 7.0; /usr/include/asm-generic/socket.h
+-- Debian 7; /usr/include/asm-generic/socket.h
 soBindToDevice = 25
 
 setSockOptStr :: Socket -> Int -> Int -> String -> IO Int

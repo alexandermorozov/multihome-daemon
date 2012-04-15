@@ -1,4 +1,4 @@
-module Timer (TimerReel, addTimer) where
+module Timer (TimerReel, newTimerReel, addTimer) where
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (MVar, newMVar, takeMVar, putMVar)

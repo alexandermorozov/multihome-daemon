@@ -21,7 +21,8 @@ Executable multihome-daemon
   
   -- Packages needed in order to build this package.
   -- Build-depends:       
-  Build-Depends:  base, hexdump, bytestring, binary, binary-strict, network, time
+  Build-Depends:  base, hexdump, bytestring, binary, binary-strict, network,
+                  time, dequeue, containers, mtl, transformers
   Other-modules:  Timer, Sock
   Build-tools:    c2hs 
   
