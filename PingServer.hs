@@ -2,12 +2,13 @@
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.Chan (Chan, newChan, readChan, writeChan)
-import Control.Monad (liftM, forever)
+import Control.Monad (liftM, forever, when)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.State (StateT, execStateT, modify)
+import Control.Monad.State (StateT, execStateT, modify, gets, get, put)
 import qualified Data.ByteString as SB
 import qualified Data.ByteString.Lazy as LB
 import Data.Foldable (toList)
+import Data.Maybe (isNothing, fromJust)
 import qualified Data.Map as Map
 import Data.Time.Clock (UTCTime)
 import Data.Word (Word32)
@@ -26,7 +27,7 @@ import SockOpt
 
 type IP = Word32
 
-data PingServer = PingServer (Chan Command)
+data PingServer = PingServer {serverChan :: Chan Command}
 
 data PacketId = PacketId { pktIp :: IP
                          , pktId :: Int
@@ -38,19 +39,22 @@ data ServerState = ServerState { srvIps :: DQ.BankersDequeue IP
                                , srvSentPackets :: Map.Map PacketId UTCTime
                                , srvPingInterval :: Maybe Double
                                , srvTimeoutInterval :: Maybe Double
-                               , srvLinkTimeout :: Maybe (IO ())
+                               , srvTimeoutAction :: Maybe (IO ())
+                               , srvLinkTimeoutCancel :: Maybe (IO ())
                                }
 
 data Command = AddHost String
              | DelHost String
              | SetPingInterval Double
              | SetTimeoutInterval Double
+             | SetTimeoutAction (IO ())
              | Exit
 
              | StartPing
              | PingReceived IpPacket IcmpEchoPacket
              | PingTimedOut PacketId
-             deriving(Show)
+             | LinkTimeout
+
 
 instance Ord PacketId where
     (PacketId a1 b1 c1) <= (PacketId a2 b2 c2) =
@@ -59,6 +63,9 @@ instance Ord PacketId where
 main = withSocketsDo $ do
     addr <- inet_addr "192.168.3.2"
     ps <- newPingServer "br0"
+    addHost ps "192.168.3.4"
+    setTimeoutInterval ps 7
+    setPingInterval ps 3
     forever $ threadDelay 1
 
 
@@ -76,6 +83,28 @@ newPingServer interface = do
         return s
 
 
+addHost :: PingServer -> String -> IO ()
+addHost ps = sendC ps . AddHost
+
+delHost :: PingServer -> String -> IO ()
+delHost ps = sendC ps . DelHost
+
+setTimeoutInterval :: PingServer -> Double -> IO ()
+setTimeoutInterval ps = sendC ps . SetTimeoutInterval
+
+setTimeoutAction :: PingServer -> IO () -> IO ()
+setTimeoutAction ps = sendC ps . SetTimeoutAction
+
+setTimeout :: PingServer -> Double -> IO ()
+setTimeout ps = sendC ps . SetTimeoutInterval
+
+setPingInterval :: PingServer -> Double -> IO ()
+setPingInterval ps = sendC ps . SetPingInterval
+
+sendC :: PingServer -> Command -> IO ()
+sendC ps = writeChan (serverChan ps)
+
+
 runServer :: Socket -> Chan Command -> IO ()
 runServer sock chan = do
     forkIO $ socketListener sock chan
@@ -85,7 +114,8 @@ runServer sock chan = do
                             , srvSentPackets = Map.empty
                             , srvPingInterval = Nothing
                             , srvTimeoutInterval = Nothing
-                            , srvLinkTimeout = Nothing
+                            , srvTimeoutAction = Nothing
+                            , srvLinkTimeoutCancel = Nothing
                             }
     execStateT loop state
     return ()
@@ -93,24 +123,42 @@ runServer sock chan = do
     loop :: StateT ServerState IO ()
     loop = do
         cmd <- liftIO $ readChan chan
-        liftIO $ print cmd
+        -- liftIO $ print cmd
+        s <- get
         case cmd of
-            AddHost h -> addHost h >> loop
-            DelHost h -> delHost h >> loop
-            SetPingInterval dt ->
-                modify (\s -> s {srvPingInterval = Just dt}) >> loop
-            SetTimeoutInterval dt ->
-                modify (\s -> s {srvTimeoutInterval = Just dt}) >> loop
+            AddHost h -> do
+                addr <- liftIO $ inet_addr h
+                put $ s {srvIps = DQ.pushFront (srvIps s) addr}
+                loop
+            DelHost h -> do
+                addr <- liftIO $ inet_addr h
+                put $ s {srvIps = filterAddr addr $ srvIps s}
+            SetPingInterval dt -> do
+                when (isNothing $ srvPingInterval s) $
+                        liftIO $ writeChan chan StartPing
+                put $ s {srvPingInterval = Just dt}
+                loop
+            SetTimeoutInterval dt -> do
+                put $ s {srvTimeoutInterval = Just dt}
+                when (isNothing $ srvLinkTimeoutCancel s) $ do
+                    cancel <- addTm (srvTReel s) dt (send LinkTimeout)
+                    modify (\s -> s {srvLinkTimeoutCancel = Just cancel})
+                loop
+            StartPing -> do
+                liftIO $ print "Start ping"
+                addTm (fromJust $ srvPingInterval s) (send StartPing)
+                loop
+            LinkTimeout -> do
+                liftIO $ print "Link timeout"
+                loop
             Exit -> return ()
             --StartPing -> startPing
+    filterAddr addr addrs =  DQ.fromList $ filter (/= addr) (toList addrs)
+    send = writeChan chan
+    addTm dt act = do
+        r <- gets srvTReel
+        liftIO $ addTimer r dt act
 
-    addHost h = do
-        addr <- liftIO $ inet_addr h
-        modify $ \s -> s {srvIps = DQ.pushFront (srvIps s) addr}
-    delHost h = do
-        addr <- liftIO $ inet_addr h
-        let filterAddr = \as -> DQ.fromList $ filter (\a -> a /= addr) (toList as)
-        modify $ \s -> s {srvIps = filterAddr $ srvIps s}
 
 
 socketListener :: Socket -> Chan Command -> IO ()
