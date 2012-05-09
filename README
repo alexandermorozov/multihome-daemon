@@ -1,0 +1,16 @@
+This project aims to create a router daemon for multihomed linux machines.
+
+At home I've got two internet uplinks (DSL/PPPoE and Ethernet/l2tp). One is
+fast, the other is slow and both go down from time to time. So there is a
+need to test the links regulary and select a working one according to some
+preset priorities, or maybe even do load balancing or routing specific kinds
+of traffic through specified uplink. It also would be useful to control xl2tp
+directly, because sometimes it just hangs and requires restart (I guess
+that's a bug, but there will always be more bugs).
+
+Right now project is in a initial development phase and only small parts are
+implemented.
+
+It's written in Haskell because of it's advanced concurrency model and mostly
+because I wanted to have some fun and learn something new )
+
