@@ -11,6 +11,6 @@ that's a bug, but there will always be more bugs).
 Right now project is in a initial development phase and only small parts are
 implemented.
 
-It's written in Haskell because of it's advanced concurrency model and mostly
+It's written in Haskell because of its advanced concurrency model and mostly
 because I wanted to have some fun and learn something new )
 
