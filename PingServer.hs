@@ -36,7 +36,7 @@ data PacketId = PacketId { pktIp :: IP
 data ServerState = ServerState { srvIps :: DQ.BankersDequeue IP
                                , srvTReel :: TimerReel
                                , srvSentPackets :: Map.Map PacketId UTCTime
-                               , srvTestInterval :: Maybe Double
+                               , srvPingInterval :: Maybe Double
                                , srvTimeoutInterval :: Maybe Double
                                , srvLinkTimeout :: Maybe (IO ())
                                }
@@ -83,7 +83,7 @@ runServer sock chan = do
     let state = ServerState { srvIps = DQ.empty
                             , srvTReel = tReel
                             , srvSentPackets = Map.empty
-                            , srvTestInterval = Nothing
+                            , srvPingInterval = Nothing
                             , srvTimeoutInterval = Nothing
                             , srvLinkTimeout = Nothing
                             }
@@ -98,7 +98,7 @@ runServer sock chan = do
             AddHost h -> addHost h >> loop
             DelHost h -> delHost h >> loop
             SetPingInterval dt ->
-                modify (\s -> s {srvTestInterval = Just dt}) >> loop
+                modify (\s -> s {srvPingInterval = Just dt}) >> loop
             SetTimeoutInterval dt ->
                 modify (\s -> s {srvTimeoutInterval = Just dt}) >> loop
             Exit -> return ()
