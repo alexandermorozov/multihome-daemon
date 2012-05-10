@@ -63,7 +63,7 @@ instance Ord PacketId where
 main = withSocketsDo $ do
     addr <- inet_addr "192.168.3.2"
     ps <- newPingServer "br0"
-    addHost ps "192.168.3.4"
+    addHost ps "192.168.3.2"
     setTimeoutInterval ps 7
     setPingInterval ps 3
     forever $ threadDelay 1
@@ -141,12 +141,18 @@ runServer sock chan = do
             SetTimeoutInterval dt -> do
                 put $ s {srvTimeoutInterval = Just dt}
                 when (isNothing $ srvLinkTimeoutCancel s) $ do
-                    cancel <- addTm (srvTReel s) dt (send LinkTimeout)
+                    cancel <- addTm dt (send LinkTimeout)
                     modify (\s -> s {srvLinkTimeoutCancel = Just cancel})
                 loop
             StartPing -> do
                 liftIO $ print "Start ping"
                 addTm (fromJust $ srvPingInterval s) (send StartPing)
+                let echo = dumpIcmpEchoRequest $ IcmpEchoPacket 10 10 SB.empty
+                let ip = (fromJust $ DQ.first $ srvIps s)
+                liftIO $ sendTo sock (toStrictBS echo) (SockAddrInet 0 ip)
+                loop
+            PingReceived ip echo -> do
+                liftIO $ print $ "Got ping from " ++ show(ip) ++ " " ++ show(echo)
                 loop
             LinkTimeout -> do
                 liftIO $ print "Link timeout"
@@ -158,7 +164,7 @@ runServer sock chan = do
     addTm dt act = do
         r <- gets srvTReel
         liftIO $ addTimer r dt act
-
+    toStrictBS = SB.concat . LB.toChunks
 
 
 socketListener :: Socket -> Chan Command -> IO ()
