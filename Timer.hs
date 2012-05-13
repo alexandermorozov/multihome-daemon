@@ -37,7 +37,7 @@ runTimerReel :: Chan TMessage -> [Timer] -> IO ()
 runTimerReel chan timers = do
     now <- getCurrentTime
     let dt = if null timers
-                then -1 -- indefinetely
+                then -1 -- indefinitely
                 else let secs = realToFrac $ diffUTCTime (timerT $ head timers) now
                          usecs = (floor $ secs * 10^6) :: Integer
                      in  min (max 0 usecs) (fromIntegral (maxBound :: Int))

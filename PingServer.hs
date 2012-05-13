@@ -123,7 +123,6 @@ runServer sock chan = do
     loop :: StateT ServerState IO ()
     loop = do
         cmd <- liftIO $ readChan chan
-        -- liftIO $ print cmd
         s <- get
         case cmd of
             AddHost h -> do
@@ -133,6 +132,7 @@ runServer sock chan = do
             DelHost h -> do
                 addr <- liftIO $ inet_addr h
                 put $ s {srvIps = filterAddr addr $ srvIps s}
+                loop
             SetPingInterval dt -> do
                 when (isNothing $ srvPingInterval s) $
                         liftIO $ writeChan chan StartPing
