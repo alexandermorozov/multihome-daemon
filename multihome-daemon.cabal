@@ -12,9 +12,9 @@ Build-type:          Simple
 
 -- Extra files to be distributed with the package, such as examples or
 -- a README.
--- Extra-source-files:  
+Extra-source-files:  tests/TestAll.hs
 
-Cabal-version:       >=1.2
+Cabal-version:       >=1.8
 
 Executable multihome-daemon
   Main-is: PingServer.hs
@@ -22,7 +22,12 @@ Executable multihome-daemon
   -- Packages needed in order to build this package.
   -- Build-depends:       
   Build-Depends:  base, hexdump, bytestring, binary, binary-strict, network,
-                  time, dequeue, containers, mtl, transformers
+                  time, dequeue, containers, mtl, transformers, stm
   Other-modules:  Timer, SockOpt
   Build-tools:    c2hs 
   
+Test-Suite tests
+  Type:              exitcode-stdio-1.0
+  Main-is:           tests/TestAll.hs
+  Build-Depends:  base, HUnit
+

@@ -1,4 +1,7 @@
-module Timer (TimerReel, Timer, newTimerReel, addTimer) where
+module Timer (TimerReel, Timer
+             , newTimerReel, deleteTimerReel
+             , addTimer, cancelTimer
+             ) where
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
@@ -28,6 +31,8 @@ newTimerReel = do
     forkIO $ runTimerReel tr
     return tr
 
+deleteTimerReel :: TimerReel -> IO ()
+deleteTimerReel reel = atomically $ putTMVar (rCmd reel) Exit
 
 -- A very primitive and inefficient implementation.
 -- Add is O(N), remove is O(N), dispatch is O(1).
@@ -67,16 +72,17 @@ runTimerReel r = do
 
 
 -- returns Timer structure
-addTimer :: TimerReel -> Double -> IO () -> IO ()
+addTimer :: TimerReel -> Double -> IO () -> IO Timer
 addTimer reel dt action = do
     now <- getCurrentTime
     let expire = addUTCTime (realToFrac dt) now
     atomically $ do
         sq <- readTVar $ rSeq reel
-        modifyTVar (rSeq reel) (+ 1)
         let tm = Timer sq expire action
+        modifyTVar (rSeq reel) (+ 1)
         modifyTVar (rList reel) $ insertBy compareTimers tm 
         putTMVar (rCmd reel) Refresh
+        return tm
   where
     compareTimers a b = compare (tTime a) (tTime b)
 

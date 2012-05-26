@@ -141,8 +141,9 @@ runServer sock chan = do
             SetTimeoutInterval dt -> do
                 put $ s {srvTimeoutInterval = Just dt}
                 when (isNothing $ srvLinkTimeoutCancel s) $ do
-                    cancel <- addTm dt (send LinkTimeout)
-                    modify (\s -> s {srvLinkTimeoutCancel = Just cancel})
+                    tm <- addTm dt (send LinkTimeout)
+                    let cancel = cancelTimer (srvTReel s) tm
+                    modify (\s1 -> s1 {srvLinkTimeoutCancel = Just cancel})
                 loop
             StartPing -> do
                 liftIO $ print "Start ping"
