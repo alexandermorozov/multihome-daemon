@@ -28,6 +28,6 @@ Executable multihome-daemon
   
 Test-Suite tests
   Type:              exitcode-stdio-1.0
-  Main-is:           tests/TestAll.hs
-  Build-Depends:  base, HUnit
+  Main-is:           tests/TestTimer.hs
+  Build-Depends:  base, HUnit, time, stm, containers
 
