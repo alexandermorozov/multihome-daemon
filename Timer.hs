@@ -1,11 +1,10 @@
 module Timer (TimerReel, Timer
-             , newTimerReel, deleteTimerReel
+             , startTimerReel, stopTimerReel
              , addTimer, cancelTimer
              ) where
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
---import Control.Monad (liftM, forever)
 import Data.List (null, insertBy)
 import Data.Time.Clock (UTCTime, getCurrentTime, diffUTCTime, addUTCTime)
 import System.Timeout (timeout)
@@ -17,13 +16,16 @@ data TimerReel = TimerReel { rCmd :: TMVar Command
                            , rSeq  :: TVar Integer
                            }
 
+-- A very primitive and inefficient implementation.
+-- Add is O(N), remove is O(N), dispatch is O(1).
+-- TODO: replace with Data.Map?
 data Timer = Timer { tId     :: Integer
                    , tTime   :: UTCTime
                    , tAction :: IO ()
                    }
 
-newTimerReel :: IO TimerReel
-newTimerReel = do
+startTimerReel :: IO TimerReel
+startTimerReel = do
     w <- newEmptyTMVarIO
     l <- newTVarIO []
     s <- newTVarIO 0
@@ -31,26 +33,26 @@ newTimerReel = do
     forkIO $ runTimerReel tr
     return tr
 
-deleteTimerReel :: TimerReel -> IO ()
-deleteTimerReel reel = atomically $ putTMVar (rCmd reel) Exit
+stopTimerReel :: TimerReel -> IO ()
+stopTimerReel reel = atomically $ putTMVar (rCmd reel) Exit
 
--- A very primitive and inefficient implementation.
--- Add is O(N), remove is O(N), dispatch is O(1).
 runTimerReel :: TimerReel -> IO ()
 runTimerReel r = do
-    now <- getCurrentTime
-    usecs <- atomically $ do
-        timers <- readTVar $ rList r
-        return $ case timers of
-            [] -> -1
-            tm:tms -> getDelta now (tTime tm)
-
-    res <- timeout (fromIntegral usecs) (atomically $ takeTMVar (rCmd r))
+    usecs <- usecsToSleep
+    res <- timeout usecs (atomically $ takeTMVar (rCmd r))
     case res of
         Just Refresh -> dispatch >> runTimerReel r
         Nothing      -> dispatch >> runTimerReel r
         Just Exit    -> return ()
   where
+    usecsToSleep = do
+        now <- getCurrentTime
+        atomically $ do
+            timers <- readTVar $ rList r
+            return $ case timers of
+                [] -> -1
+                tm:tms -> fromIntegral $ getDelta now (tTime tm)
+
     getDelta now t =
         let secs = realToFrac $ diffUTCTime t now
             usecs = (ceiling $ secs * 10^6) :: Integer
@@ -71,7 +73,6 @@ runTimerReel r = do
             Just t  -> tAction t >> dispatch
 
 
--- returns Timer structure
 addTimer :: TimerReel -> Double -> IO () -> IO Timer
 addTimer reel dt action = do
     now <- getCurrentTime
@@ -79,7 +80,7 @@ addTimer reel dt action = do
     atomically $ do
         sq <- readTVar $ rSeq reel
         let tm = Timer sq expire action
-        modifyTVar (rSeq reel) (+ 1)
+        modifyTVar (rSeq reel) (+1)
         modifyTVar (rList reel) $ insertBy compareTimers tm 
         putTMVar (rCmd reel) Refresh
         return tm
@@ -93,6 +94,4 @@ cancelTimer reel tm = atomically $ do
   where
     rm = filter (\x -> tId x /= tId tm)
 
-modifyTVar :: TVar a -> (a -> a) -> STM ()
-modifyTVar x f = readTVar x >>= writeTVar x . f
 

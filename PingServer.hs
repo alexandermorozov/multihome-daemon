@@ -43,6 +43,8 @@ data ServerState = ServerState { srvIps :: DQ.BankersDequeue IP
                                , srvLinkTimeoutCancel :: Maybe (IO ())
                                }
 
+
+
 data Command = AddHost String
              | DelHost String
              | SetPingInterval Double
@@ -62,7 +64,7 @@ instance Ord PacketId where
 
 main = withSocketsDo $ do
     addr <- inet_addr "192.168.3.2"
-    ps <- newPingServer "br0"
+    ps <- newPingServer "br1"
     addHost ps "192.168.3.2"
     setTimeoutInterval ps 7
     setPingInterval ps 3
@@ -108,7 +110,7 @@ sendC ps = writeChan (serverChan ps)
 runServer :: Socket -> Chan Command -> IO ()
 runServer sock chan = do
     forkIO $ socketListener sock chan
-    tReel <- newTimerReel
+    tReel <- startTimerReel
     let state = ServerState { srvIps = DQ.empty
                             , srvTReel = tReel
                             , srvSentPackets = Map.empty
